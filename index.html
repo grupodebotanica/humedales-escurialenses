@@ -1,0 +1,1583 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <link rel="stylesheet" href="css/leaflet.css">
+        <link rel="stylesheet" href="css/L.Control.Layers.Tree.css">
+        <link rel="stylesheet" href="css/L.Control.Locate.min.css">
+        <link rel="stylesheet" href="css/qgis2web.css">
+        <link rel="stylesheet" href="css/fontawesome-all.min.css">
+        <link rel="stylesheet" href="css/leaflet.photon.css">
+        <link rel="stylesheet" href="css/leaflet-measure.css">
+        <style>
+        html, body, #map {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        </style>
+        <title></title>
+    </head>
+    <body>
+        <div id="map">
+        </div>
+        <script src="js/qgis2web_expressions.js"></script>
+        <script src="js/leaflet.js"></script>
+        <script src="js/L.Control.Layers.Tree.min.js"></script>
+        <script src="js/L.Control.Locate.min.js"></script>
+        <script src="js/leaflet.rotatedMarker.js"></script>
+        <script src="js/leaflet.pattern.js"></script>
+        <script src="js/leaflet-hash.js"></script>
+        <script src="js/Autolinker.min.js"></script>
+        <script src="js/rbush.min.js"></script>
+        <script src="js/labelgun.min.js"></script>
+        <script src="js/labels.js"></script>
+        <script src="js/leaflet.wms.js"></script>
+        <script src="js/leaflet.photon.js"></script>
+        <script src="js/leaflet-measure.js"></script>
+        <script src="data/ES3110005Rioguadarrama_2.js"></script>
+        <script src="data/PORNSierradeGuadarrama_3.js"></script>
+        <script src="data/TerritoriohistricoDecreto522006_4.js"></script>
+        <script src="data/ZonaperifricaTerritorioHistricoDecreto522006_5.js"></script>
+        <script src="data/CuencasSanLorenzodeElEscorial_6.js"></script>
+        <script src="data/CuencasdeElEscorial_7.js"></script>
+        <script src="data/Sistemashmedos_8.js"></script>
+        <script src="data/Lagunas_9.js"></script>
+        <script src="data/Lmitesmunicipales_10.js"></script>
+        <script>
+        var highlightLayer;
+        function highlightFeature(e) {
+            highlightLayer = e.target;
+            highlightLayer.openPopup();
+        }
+        var map = L.map('map', {
+            zoomControl:false, maxZoom:28, minZoom:1
+        }).fitBounds([[40.5579921245225,-4.142387518038667],[40.62569509313167,-4.047821165345188]]);
+        var hash = new L.Hash(map);
+        map.attributionControl.setPrefix('<a href="https://github.com/tomchadwin/qgis2web" target="_blank">qgis2web</a> &middot; <a href="https://leafletjs.com" title="A JS library for interactive maps">Leaflet</a> &middot; <a href="https://qgis.org">QGIS</a>');
+        var autolinker = new Autolinker({truncate: {length: 30, location: 'smart'}});
+        // remove popup's row if "visible-with-data"
+        function removeEmptyRowsFromPopupContent(content, feature) {
+         var tempDiv = document.createElement('div');
+         tempDiv.innerHTML = content;
+         var rows = tempDiv.querySelectorAll('tr');
+         for (var i = 0; i < rows.length; i++) {
+             var td = rows[i].querySelector('td.visible-with-data');
+             var key = td ? td.id : '';
+             if (td && td.classList.contains('visible-with-data') && feature.properties[key] == null) {
+                 rows[i].parentNode.removeChild(rows[i]);
+             }
+         }
+         return tempDiv.innerHTML;
+        }
+        // modify popup if contains media
+        function addClassToPopupIfMedia(content, popup) {
+            var tempDiv = document.createElement('div');
+            tempDiv.innerHTML = content;
+            var imgTd = tempDiv.querySelector('td img');
+            if (imgTd) {
+                var src = imgTd.getAttribute('src');
+                if (/\.(jpg|jpeg|png|gif|bmp|webp|avif)$/i.test(src)) {
+                    popup._contentNode.classList.add('media');
+                    setTimeout(function() {
+                        popup.update();
+                    }, 10);
+                } else if (/\.(mp3|wav|ogg|aac)$/i.test(src)) {
+                    var audio = document.createElement('audio');
+                    audio.controls = true;
+                    audio.src = src;
+                    imgTd.parentNode.replaceChild(audio, imgTd);
+                    popup._contentNode.classList.add('media');
+                    setTimeout(function() {
+                        popup.setContent(tempDiv.innerHTML);
+                        popup.update();
+                    }, 10);
+                } else if (/\.(mp4|webm|ogg|mov)$/i.test(src)) {
+                    var video = document.createElement('video');
+                    video.controls = true;
+                    video.src = src;
+                    video.style.width = "400px";
+                    video.style.height = "300px";
+                    video.style.maxHeight = "60vh";
+                    video.style.maxWidth = "60vw";
+                    imgTd.parentNode.replaceChild(video, imgTd);
+                    popup._contentNode.classList.add('media');
+                    // Aggiorna il popup quando il video carica i metadati
+                    video.addEventListener('loadedmetadata', function() {
+                        popup.update();
+                    });
+                    setTimeout(function() {
+                        popup.setContent(tempDiv.innerHTML);
+                        popup.update();
+                    }, 10);
+                } else {
+                    popup._contentNode.classList.remove('media');
+                }
+            } else {
+                popup._contentNode.classList.remove('media');
+            }
+        }
+        var zoomControl = L.control.zoom({
+            position: 'topleft'
+        }).addTo(map);
+        L.control.locate({locateOptions: {maxZoom: 19}}).addTo(map);
+        var measureControl = new L.Control.Measure({
+            position: 'topleft',
+            primaryLengthUnit: 'meters',
+            secondaryLengthUnit: 'kilometers',
+            primaryAreaUnit: 'sqmeters',
+            secondaryAreaUnit: 'hectares'
+        });
+        measureControl.addTo(map);
+        document.getElementsByClassName('leaflet-control-measure-toggle')[0].innerHTML = '';
+        document.getElementsByClassName('leaflet-control-measure-toggle')[0].className += ' fas fa-ruler';
+        var bounds_group = new L.featureGroup([]);
+        function setBounds() {
+        }
+        map.createPane('pane_GoogleSatellite_0');
+        map.getPane('pane_GoogleSatellite_0').style.zIndex = 400;
+        var layer_GoogleSatellite_0 = L.tileLayer('http://www.google.cn/maps/vt?lyrs=s@189&gl=cn&x={x}&y={y}&z={z}', {
+            pane: 'pane_GoogleSatellite_0',
+            opacity: 1.0,
+            attribution: '',
+            minZoom: 1,
+            maxZoom: 28,
+            minNativeZoom: 0,
+            maxNativeZoom: 18
+        });
+        layer_GoogleSatellite_0;
+        map.addLayer(layer_GoogleSatellite_0);
+        map.createPane('pane_OLISTAT19971998_1');
+        map.getPane('pane_OLISTAT19971998_1').style.zIndex = 401;
+        var layer_OLISTAT19971998_1 = L.WMS.layer("https://www.ign.es/wms/pnoa-historico", "OLISTAT", {
+            pane: 'pane_OLISTAT19971998_1',
+            format: 'image/png',
+            uppercase: true,
+            transparent: true,
+            continuousWorld : true,
+            tiled: true,
+            info_format: 'text/html',
+            opacity: 1,
+            identify: false,
+            attribution: '',
+        });
+        function pop_ES3110005Rioguadarrama_2(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['CDID'] !== null ? autolinker.link(String(feature.properties['CDID']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['CD_ZEC_COD'] !== null ? autolinker.link(String(feature.properties['CD_ZEC_COD']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['DS_ZEC_NAM'] !== null ? autolinker.link(String(feature.properties['DS_ZEC_NAM']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['CD_ZEC_CCA'] !== null ? autolinker.link(String(feature.properties['CD_ZEC_CCA']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['DS_ZEC_RG_'] !== null ? autolinker.link(String(feature.properties['DS_ZEC_RG_']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['CD_ZEC_NUT'] !== null ? autolinker.link(String(feature.properties['CD_ZEC_NUT']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['NM_AREA_HA'] !== null ? autolinker.link(String(feature.properties['NM_AREA_HA']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_ES3110005Rioguadarrama_2_0() {
+            return {
+                pane: 'pane_ES3110005Rioguadarrama_2',
+                opacity: 1,
+                color: 'rgba(245,49,82,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(245,49,82,0.4980392156862745)',
+                interactive: false,
+            }
+        }
+        map.createPane('pane_ES3110005Rioguadarrama_2');
+        map.getPane('pane_ES3110005Rioguadarrama_2').style.zIndex = 402;
+        map.getPane('pane_ES3110005Rioguadarrama_2').style['mix-blend-mode'] = 'normal';
+        var layer_ES3110005Rioguadarrama_2 = new L.geoJson(json_ES3110005Rioguadarrama_2, {
+            attribution: '',
+            interactive: false,
+            dataVar: 'json_ES3110005Rioguadarrama_2',
+            layerName: 'layer_ES3110005Rioguadarrama_2',
+            pane: 'pane_ES3110005Rioguadarrama_2',
+            onEachFeature: pop_ES3110005Rioguadarrama_2,
+            style: style_ES3110005Rioguadarrama_2_0,
+        });
+        bounds_group.addLayer(layer_ES3110005Rioguadarrama_2);
+        function pop_PORNSierradeGuadarrama_3(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">DS_TIPO_Z0</th>\
+                        <td class="visible-with-data" id="DS_TIPO_Z0">' + (feature.properties['DS_TIPO_Z0'] !== null ? autolinker.link(String(feature.properties['DS_TIPO_Z0']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_PORNSierradeGuadarrama_3_0(feature) {
+            switch(String(feature.properties['DS_TIPO_Z0'])) {
+                case 'Área de Planeamiento Urbanístico':
+                    return {
+                pane: 'pane_PORNSierradeGuadarrama_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(68,1,84,0.4549019607843137)',
+                interactive: true,
+            }
+                    break;
+                case 'Paisaje Protegido':
+                    return {
+                pane: 'pane_PORNSierradeGuadarrama_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(71,40,120,0.4)',
+                interactive: true,
+            }
+                    break;
+                case 'Zona de Aprovechamiento Ordenado de los Recursos Naturales':
+                    return {
+                pane: 'pane_PORNSierradeGuadarrama_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(62,74,137,0.4)',
+                interactive: true,
+            }
+                    break;
+                case 'Zona de Asentamientos Tradicionales':
+                    return {
+                pane: 'pane_PORNSierradeGuadarrama_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(49,104,142,0.403921568627451)',
+                interactive: true,
+            }
+                    break;
+                case 'Zona de Conservación y Mantenimiento de Usos Tradicionales':
+                    return {
+                pane: 'pane_PORNSierradeGuadarrama_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(38,131,142,0.403921568627451)',
+                interactive: true,
+            }
+                    break;
+                case 'Zona de la Cerca Histórica de Felipe II':
+                    return {
+                pane: 'pane_PORNSierradeGuadarrama_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(30,158,137,0.403921568627451)',
+                interactive: true,
+            }
+                    break;
+                case 'Zona de Máxima Protección':
+                    return {
+                pane: 'pane_PORNSierradeGuadarrama_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(53,183,121,0.403921568627451)',
+                interactive: true,
+            }
+                    break;
+                case 'Zona de Reserva':
+                    return {
+                pane: 'pane_PORNSierradeGuadarrama_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(108,206,89,0.403921568627451)',
+                interactive: true,
+            }
+                    break;
+                case 'Zona de Transición':
+                    return {
+                pane: 'pane_PORNSierradeGuadarrama_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(180,222,44,0.403921568627451)',
+                interactive: true,
+            }
+                    break;
+                case 'Zona Especial':
+                    return {
+                pane: 'pane_PORNSierradeGuadarrama_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(253,231,37,0.4)',
+                interactive: true,
+            }
+                    break;
+            }
+        }
+        map.createPane('pane_PORNSierradeGuadarrama_3');
+        map.getPane('pane_PORNSierradeGuadarrama_3').style.zIndex = 403;
+        map.getPane('pane_PORNSierradeGuadarrama_3').style['mix-blend-mode'] = 'normal';
+        var layer_PORNSierradeGuadarrama_3 = new L.geoJson(json_PORNSierradeGuadarrama_3, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_PORNSierradeGuadarrama_3',
+            layerName: 'layer_PORNSierradeGuadarrama_3',
+            pane: 'pane_PORNSierradeGuadarrama_3',
+            onEachFeature: pop_PORNSierradeGuadarrama_3,
+            style: style_PORNSierradeGuadarrama_3_0,
+        });
+        bounds_group.addLayer(layer_PORNSierradeGuadarrama_3);
+        function pop_TerritoriohistricoDecreto522006_4(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['OBJECTID'] !== null ? autolinker.link(String(feature.properties['OBJECTID']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['CD_CODIGO'] !== null ? autolinker.link(String(feature.properties['CD_CODIGO']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['TL_NOMBRE'] !== null ? autolinker.link(String(feature.properties['TL_NOMBRE']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['CL_DES_GEN'] !== null ? autolinker.link(String(feature.properties['CL_DES_GEN']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['CL_DES_BIE'] !== null ? autolinker.link(String(feature.properties['CL_DES_BIE']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['CL_HISTORI'] !== null ? autolinker.link(String(feature.properties['CL_HISTORI']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['SUP_HA'] !== null ? autolinker.link(String(feature.properties['SUP_HA']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['PERI_KM'] !== null ? autolinker.link(String(feature.properties['PERI_KM']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['FillTransp'] !== null ? autolinker.link(String(feature.properties['FillTransp']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['OutlineTra'] !== null ? autolinker.link(String(feature.properties['OutlineTra']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['SHAPE_Leng'] !== null ? autolinker.link(String(feature.properties['SHAPE_Leng']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['SHAPE_Area'] !== null ? autolinker.link(String(feature.properties['SHAPE_Area']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_TerritoriohistricoDecreto522006_4_0() {
+            return {
+                pane: 'pane_TerritoriohistricoDecreto522006_4',
+                opacity: 1,
+                color: 'rgba(255,201,23,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(255,201,23,0.4980392156862745)',
+                interactive: false,
+            }
+        }
+        map.createPane('pane_TerritoriohistricoDecreto522006_4');
+        map.getPane('pane_TerritoriohistricoDecreto522006_4').style.zIndex = 404;
+        map.getPane('pane_TerritoriohistricoDecreto522006_4').style['mix-blend-mode'] = 'normal';
+        var layer_TerritoriohistricoDecreto522006_4 = new L.geoJson(json_TerritoriohistricoDecreto522006_4, {
+            attribution: '',
+            interactive: false,
+            dataVar: 'json_TerritoriohistricoDecreto522006_4',
+            layerName: 'layer_TerritoriohistricoDecreto522006_4',
+            pane: 'pane_TerritoriohistricoDecreto522006_4',
+            onEachFeature: pop_TerritoriohistricoDecreto522006_4,
+            style: style_TerritoriohistricoDecreto522006_4_0,
+        });
+        bounds_group.addLayer(layer_TerritoriohistricoDecreto522006_4);
+        function pop_ZonaperifricaTerritorioHistricoDecreto522006_5(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['id'] !== null ? autolinker.link(String(feature.properties['id']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_ZonaperifricaTerritorioHistricoDecreto522006_5_0() {
+            return {
+                pane: 'pane_ZonaperifricaTerritorioHistricoDecreto522006_5',
+                opacity: 1,
+                color: 'rgba(220,250,85,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(220,250,85,0.4980392156862745)',
+                interactive: false,
+            }
+        }
+        map.createPane('pane_ZonaperifricaTerritorioHistricoDecreto522006_5');
+        map.getPane('pane_ZonaperifricaTerritorioHistricoDecreto522006_5').style.zIndex = 405;
+        map.getPane('pane_ZonaperifricaTerritorioHistricoDecreto522006_5').style['mix-blend-mode'] = 'normal';
+        var layer_ZonaperifricaTerritorioHistricoDecreto522006_5 = new L.geoJson(json_ZonaperifricaTerritorioHistricoDecreto522006_5, {
+            attribution: '',
+            interactive: false,
+            dataVar: 'json_ZonaperifricaTerritorioHistricoDecreto522006_5',
+            layerName: 'layer_ZonaperifricaTerritorioHistricoDecreto522006_5',
+            pane: 'pane_ZonaperifricaTerritorioHistricoDecreto522006_5',
+            onEachFeature: pop_ZonaperifricaTerritorioHistricoDecreto522006_5,
+            style: style_ZonaperifricaTerritorioHistricoDecreto522006_5_0,
+        });
+        bounds_group.addLayer(layer_ZonaperifricaTerritorioHistricoDecreto522006_5);
+        function pop_CuencasSanLorenzodeElEscorial_6(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">Nom_Rio</th>\
+                        <td class="visible-with-data" id="Nom_Rio">' + (feature.properties['Nom_Rio'] !== null ? autolinker.link(String(feature.properties['Nom_Rio']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_CuencasSanLorenzodeElEscorial_6_0(feature) {
+            switch(String(feature.properties['Nom_Rio'])) {
+                case 'ARROYO DE BARRANQUILLA':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(0,87,31,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(0,87,31,0.5019607843137255)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE CARBONELL':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(86,50,63,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(86,50,63,0.5019607843137255)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE LA JAROSA':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(156,145,197,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(156,145,197,0.5019607843137255)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE LA JAROSILLA':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(132,16,210,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE LAS CAÑADAS':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(245,162,122,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(245,162,122,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE LOS CEBADILLAS':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(236,102,146,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(236,102,146,0.5019607843137255)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE LOS LINOS':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(151,49,103,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(151,49,103,0.5019607843137255)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE LOS TEJOS':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(71,204,182,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(71,204,182,0.5019607843137255)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE NAVALACUERDA':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(235,96,71,0.403921568627451)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE PRADO VERA':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(239,209,73,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE ROBLEDONDO':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(188,97,208,0.4)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE TORRECILLA':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(130,217,87,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(130,217,87,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DEL BARRANCON':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(87,147,138,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(87,147,138,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DEL BATAN':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(252,191,0,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(252,190,3,0.5019607843137255)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DEL BOQUERON':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(134,18,15,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(134,18,15,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DEL HORNILLO':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(202,161,101,0.403921568627451)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DEL INFANTE Y ARROYO DEL ARCA DEL HELECHAL':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(212,0,108,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(212,0,108,0.5019607843137255)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DEL PICAZUELO':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(113,211,170,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DEL ROMERAL':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(231,134,9,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(231,134,9,0.5019607843137255)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DEL TOBAR':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(31,46,207,0.4)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DEL VALLE':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(48,236,114,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO GUATEL':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(0,178,45,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(0,178,45,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO LOCO':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(237,203,172,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(237,203,172,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'BARRANCO DE LOS CASTAÑOS':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(170,134,125,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(170,134,125,0.6980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'RIO DE LA ACEÑA':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(138,230,99,0.403921568627451)',
+                interactive: true,
+            }
+                    break;
+                case 'RIO GUADARRAMA':
+                    return {
+                pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+                opacity: 1,
+                color: 'rgba(107,230,228,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(107,230,228,0.30196078431372547)',
+                interactive: true,
+            }
+                    break;
+            }
+        }
+        map.createPane('pane_CuencasSanLorenzodeElEscorial_6');
+        map.getPane('pane_CuencasSanLorenzodeElEscorial_6').style.zIndex = 406;
+        map.getPane('pane_CuencasSanLorenzodeElEscorial_6').style['mix-blend-mode'] = 'normal';
+        var layer_CuencasSanLorenzodeElEscorial_6 = new L.geoJson(json_CuencasSanLorenzodeElEscorial_6, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_CuencasSanLorenzodeElEscorial_6',
+            layerName: 'layer_CuencasSanLorenzodeElEscorial_6',
+            pane: 'pane_CuencasSanLorenzodeElEscorial_6',
+            onEachFeature: pop_CuencasSanLorenzodeElEscorial_6,
+            style: style_CuencasSanLorenzodeElEscorial_6_0,
+        });
+        bounds_group.addLayer(layer_CuencasSanLorenzodeElEscorial_6);
+        function pop_CuencasdeElEscorial_7(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">Nom_Rio</th>\
+                        <td class="visible-with-data" id="Nom_Rio">' + (feature.properties['Nom_Rio'] !== null ? autolinker.link(String(feature.properties['Nom_Rio']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_CuencasdeElEscorial_7_0(feature) {
+            switch(String(feature.properties['Nom_Rio'])) {
+                case 'ARROYO DE CARBONELL':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(109,16,222,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(109,16,222,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE LA CAÑADA':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(234,165,108,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(227,125,42,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE LA FUENTE DEL CAÑAL':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(111,142,21,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(111,142,21,0.5019607843137255)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE LA FUENTE DEL TEJADILLO':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(234,91,19,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(234,107,43,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE LA FUENTE DEL ZARZALON':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(100,99,99,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(100,99,99,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE LA FUENTE VIEJA':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(0,136,123,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(0,136,123,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE LA JAROSA':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(156,145,197,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(156,145,197,0.5019607843137255)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE LOS BUZONES':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(0,87,149,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(0,87,149,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE LOS CEBADILLAS':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(236,102,146,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(236,102,146,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE LOS CONEJEROS':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(26,80,12,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(18,45,11,0.5019607843137255)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE PUENTEDELGADO':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(220,64,87,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(220,64,87,0.5019607843137255)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DE SAN GREGORIO Y ARROYO DEL CONGOSTO':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(198,196,138,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(198,196,138,0.5019607843137255)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DEL BARRANCON':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(87,147,138,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(87,147,138,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DEL BATAN':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(252,191,0,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 3.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(252,191,0,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DEL CABRERIZO':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(159,198,59,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(159,198,59,0.5019607843137255)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO DEL CHARCON':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(179,32,19,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(179,32,19,0.5019607843137255)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO GUATEL':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(0,178,45,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(0,178,45,0.5019607843137255)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO LADRON':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(138,26,155,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(138,26,155,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'ARROYO LOCO':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(173,133,102,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 2.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(237,203,172,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'REGATO DEL ESTANQUILLO':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(0,159,227,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(0,159,227,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'RIO AULENCIA':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(84,47,97,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(84,47,97,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+                case 'RIO GUADARRAMA':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(107,230,228,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(107,230,228,0.5019607843137255)',
+                interactive: true,
+            }
+                    break;
+                case 'RIO PERALES':
+                    return {
+                pane: 'pane_CuencasdeElEscorial_7',
+                opacity: 1,
+                color: 'rgba(215,249,167,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(215,249,167,0.4980392156862745)',
+                interactive: true,
+            }
+                    break;
+            }
+        }
+        map.createPane('pane_CuencasdeElEscorial_7');
+        map.getPane('pane_CuencasdeElEscorial_7').style.zIndex = 407;
+        map.getPane('pane_CuencasdeElEscorial_7').style['mix-blend-mode'] = 'normal';
+        var layer_CuencasdeElEscorial_7 = new L.geoJson(json_CuencasdeElEscorial_7, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_CuencasdeElEscorial_7',
+            layerName: 'layer_CuencasdeElEscorial_7',
+            pane: 'pane_CuencasdeElEscorial_7',
+            onEachFeature: pop_CuencasdeElEscorial_7,
+            style: style_CuencasdeElEscorial_7_0,
+        });
+        bounds_group.addLayer(layer_CuencasdeElEscorial_7);
+        function pop_Sistemashmedos_8(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">Nombre</th>\
+                        <td class="visible-with-data" id="Nombre">' + (feature.properties['Nombre'] !== null ? autolinker.link(String(feature.properties['Nombre']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_Sistemashmedos_8_0() {
+            return {
+                pane: 'pane_Sistemashmedos_8',
+                opacity: 1,
+                color: 'rgba(31,59,183,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(125,139,143,0.0)',
+                interactive: true,
+            }
+        }
+        map.createPane('pane_Sistemashmedos_8');
+        map.getPane('pane_Sistemashmedos_8').style.zIndex = 408;
+        map.getPane('pane_Sistemashmedos_8').style['mix-blend-mode'] = 'normal';
+        var layer_Sistemashmedos_8 = new L.geoJson(json_Sistemashmedos_8, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_Sistemashmedos_8',
+            layerName: 'layer_Sistemashmedos_8',
+            pane: 'pane_Sistemashmedos_8',
+            onEachFeature: pop_Sistemashmedos_8,
+            style: style_Sistemashmedos_8_0,
+        });
+        bounds_group.addLayer(layer_Sistemashmedos_8);
+        map.addLayer(layer_Sistemashmedos_8);
+        function pop_Lagunas_9(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">Nombre</th>\
+                        <td>' + (feature.properties['Nombre'] !== null ? autolinker.link(String(feature.properties['Nombre']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Nombre_2</th>\
+                        <td class="visible-with-data" id="Nombre_2">' + (feature.properties['Nombre_2'] !== null ? autolinker.link(String(feature.properties['Nombre_2']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_Lagunas_9_0() {
+            return {
+                pane: 'pane_Lagunas_9',
+                opacity: 1,
+                color: 'rgba(16,210,197,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(229,182,54,0.0)',
+                interactive: true,
+            }
+        }
+        map.createPane('pane_Lagunas_9');
+        map.getPane('pane_Lagunas_9').style.zIndex = 409;
+        map.getPane('pane_Lagunas_9').style['mix-blend-mode'] = 'normal';
+        var layer_Lagunas_9 = new L.geoJson(json_Lagunas_9, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_Lagunas_9',
+            layerName: 'layer_Lagunas_9',
+            pane: 'pane_Lagunas_9',
+            onEachFeature: pop_Lagunas_9,
+            style: style_Lagunas_9_0,
+        });
+        bounds_group.addLayer(layer_Lagunas_9);
+        map.addLayer(layer_Lagunas_9);
+        function pop_Lmitesmunicipales_10(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_Lmitesmunicipales_10_0() {
+            return {
+                pane: 'pane_Lmitesmunicipales_10',
+                opacity: 1,
+                color: 'rgba(182,18,23,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(182,18,23,0.0)',
+                interactive: false,
+            }
+        }
+        map.createPane('pane_Lmitesmunicipales_10');
+        map.getPane('pane_Lmitesmunicipales_10').style.zIndex = 410;
+        map.getPane('pane_Lmitesmunicipales_10').style['mix-blend-mode'] = 'normal';
+        var layer_Lmitesmunicipales_10 = new L.geoJson(json_Lmitesmunicipales_10, {
+            attribution: '',
+            interactive: false,
+            dataVar: 'json_Lmitesmunicipales_10',
+            layerName: 'layer_Lmitesmunicipales_10',
+            pane: 'pane_Lmitesmunicipales_10',
+            onEachFeature: pop_Lmitesmunicipales_10,
+            style: style_Lmitesmunicipales_10_0,
+        });
+        bounds_group.addLayer(layer_Lmitesmunicipales_10);
+        map.addLayer(layer_Lmitesmunicipales_10);
+        var overlaysTree = [
+            {label: '<img src="legend/Lmitesmunicipales_10.png" /> Límites municipales', layer: layer_Lmitesmunicipales_10},
+            {label: '<img src="legend/Lagunas_9.png" /> Lagunas', layer: layer_Lagunas_9},
+            {label: '<img src="legend/Sistemashmedos_8.png" /> Sistemas húmedos', layer: layer_Sistemashmedos_8},
+            {label: 'Cuencas de El Escorial<br /><table><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ArroyodeCarbonell0.png" /></td><td>Arroyo de Carbonell</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ArroyodelaCañada1.png" /></td><td>Arroyo de la Cañada</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ArroyodelaFuentedelCañal2.png" /></td><td>Arroyo de la Fuente del Cañal</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ArroyodelaFuentedelTejadillo3.png" /></td><td>Arroyo de la Fuente del Tejadillo</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ARROYODELAFUENTEDELZARZALON4.png" /></td><td>ARROYO DE LA FUENTE DEL ZARZALON</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ArroyodelaFuentevieja5.png" /></td><td>Arroyo de la Fuentevieja</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ArroyodelaJarosa6.png" /></td><td>Arroyo de la Jarosa</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ArroyodelosBuzones7.png" /></td><td>Arroyo de los Buzones</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ArroyodelasCebadillas8.png" /></td><td>Arroyo de las Cebadillas</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ArroyodelosConejeros9.png" /></td><td>Arroyo de los Conejeros</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ArroyodePuentedelgado10.png" /></td><td>Arroyo de Puentedelgado</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ArroyodeSanGregorioyArroyodelCongosto11.png" /></td><td>Arroyo de San Gregorio y Arroyo del Congosto</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ArroyodelBarrancón12.png" /></td><td>Arroyo del Barrancón</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ArroyodelBatán13.png" /></td><td>Arroyo del Batán</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ArroyodelCabrerizo14.png" /></td><td>Arroyo del Cabrerizo</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ArroyodelCharcón15.png" /></td><td>Arroyo del Charcón</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ArroyoGuatel16.png" /></td><td>Arroyo Guatel</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ArroyoLadrón17.png" /></td><td>Arroyo Ladrón</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_ArroyoLoco18.png" /></td><td>Arroyo Loco</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_RegatodelEstanquillo19.png" /></td><td>Regato del Estanquillo</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_RíoAulencia20.png" /></td><td>Río Aulencia</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_RíoGuadarrama21.png" /></td><td>Río Guadarrama</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasdeElEscorial_7_RíoPerales22.png" /></td><td>Río Perales</td></tr></table>', layer: layer_CuencasdeElEscorial_7},
+            {label: 'Cuencas San Lorenzo de El Escorial<br /><table><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODEBARRANQUILLA0.png" /></td><td>ARROYO DE BARRANQUILLA</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODECARBONELL1.png" /></td><td>ARROYO DE CARBONELL</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODELAJAROSA2.png" /></td><td>ARROYO DE LA JAROSA</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODELAJAROSILLA3.png" /></td><td>ARROYO DE LA JAROSILLA</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODELASCAÑADAS4.png" /></td><td>ARROYO DE LAS CAÑADAS</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODELOSCEBADILLAS5.png" /></td><td>ARROYO DE LOS CEBADILLAS</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODELOSLINOS6.png" /></td><td>ARROYO DE LOS LINOS</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODELOSTEJOS7.png" /></td><td>ARROYO DE LOS TEJOS</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODENAVALACUERDA8.png" /></td><td>ARROYO DE NAVALACUERDA</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODEPRADOVERA9.png" /></td><td>ARROYO DE PRADO VERA</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODEROBLEDONDO10.png" /></td><td>ARROYO DE ROBLEDONDO</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODETORRECILLA11.png" /></td><td>ARROYO DE TORRECILLA</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODELBARRANCON12.png" /></td><td>ARROYO DEL BARRANCON</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODELBATAN13.png" /></td><td>ARROYO DEL BATAN</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODELBOQUERON14.png" /></td><td>ARROYO DEL BOQUERON</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODELHORNILLO15.png" /></td><td>ARROYO DEL HORNILLO</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODELINFANTEYARROYODELARCADELHELECHAL16.png" /></td><td>ARROYO DEL INFANTE Y ARROYO DEL ARCA DEL HELECHAL</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODELPICAZUELO17.png" /></td><td>ARROYO DEL PICAZUELO</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODELROMERAL18.png" /></td><td>ARROYO DEL ROMERAL</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODELTOBAR19.png" /></td><td>ARROYO DEL TOBAR</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYODELVALLE20.png" /></td><td>ARROYO DEL VALLE</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYOGUATEL21.png" /></td><td>ARROYO GUATEL</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_ARROYOLOCO22.png" /></td><td>ARROYO LOCO</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_BARRANCODELOSCASTAÑOS23.png" /></td><td>BARRANCO DE LOS CASTAÑOS</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_RIODELAACEÑA24.png" /></td><td>RIO DE LA ACEÑA</td></tr><tr><td style="text-align: center;"><img src="legend/CuencasSanLorenzodeElEscorial_6_RIOGUADARRAMA25.png" /></td><td>RIO GUADARRAMA</td></tr></table>', layer: layer_CuencasSanLorenzodeElEscorial_6},
+            {label: '<img src="legend/ZonaperifricaTerritorioHistricoDecreto522006_5.png" /> Zona periférica Territorio Histórico (Decreto 52/2006)', layer: layer_ZonaperifricaTerritorioHistricoDecreto522006_5},
+            {label: '<img src="legend/TerritoriohistricoDecreto522006_4.png" /> Territorio histórico (Decreto 52/2006)', layer: layer_TerritoriohistricoDecreto522006_4},
+            {label: 'PORN Sierra de Guadarrama<br /><table><tr><td style="text-align: center;"><img src="legend/PORNSierradeGuadarrama_3_ÁreadePlaneamientoUrbanístico0.png" /></td><td>Área de Planeamiento Urbanístico</td></tr><tr><td style="text-align: center;"><img src="legend/PORNSierradeGuadarrama_3_PaisajeProtegido1.png" /></td><td>Paisaje Protegido</td></tr><tr><td style="text-align: center;"><img src="legend/PORNSierradeGuadarrama_3_ZonadeAprovechamientoOrdenadodelosRecursosNaturales2.png" /></td><td>Zona de Aprovechamiento Ordenado de los Recursos Naturales</td></tr><tr><td style="text-align: center;"><img src="legend/PORNSierradeGuadarrama_3_ZonadeAsentamientosTradicionales3.png" /></td><td>Zona de Asentamientos Tradicionales</td></tr><tr><td style="text-align: center;"><img src="legend/PORNSierradeGuadarrama_3_ZonadeConservaciónyMantenimientodeUsosTradicionales4.png" /></td><td>Zona de Conservación y Mantenimiento de Usos Tradicionales</td></tr><tr><td style="text-align: center;"><img src="legend/PORNSierradeGuadarrama_3_ZonadelaCercaHistóricadeFelipeII5.png" /></td><td>Zona de la Cerca Histórica de Felipe II</td></tr><tr><td style="text-align: center;"><img src="legend/PORNSierradeGuadarrama_3_ZonadeMáximaProtección6.png" /></td><td>Zona de Máxima Protección</td></tr><tr><td style="text-align: center;"><img src="legend/PORNSierradeGuadarrama_3_ZonadeReserva7.png" /></td><td>Zona de Reserva</td></tr><tr><td style="text-align: center;"><img src="legend/PORNSierradeGuadarrama_3_ZonadeTransición8.png" /></td><td>Zona de Transición</td></tr><tr><td style="text-align: center;"><img src="legend/PORNSierradeGuadarrama_3_ZonaEspecial9.png" /></td><td>Zona Especial</td></tr></table>', layer: layer_PORNSierradeGuadarrama_3},
+            {label: '<img src="legend/ES3110005Rioguadarrama_2.png" /> ES3110005 Rio guadarrama', layer: layer_ES3110005Rioguadarrama_2},
+            {label: "OLISTAT (1997-1998)", layer: layer_OLISTAT19971998_1, radioGroup: 'bm' },
+            {label: "Google Satellite", layer: layer_GoogleSatellite_0, radioGroup: 'bm' },]
+        var lay = L.control.layers.tree(null, overlaysTree,{
+            //namedToggle: true,
+            //selectorBack: false,
+            //closedSymbol: '&#8862; &#x1f5c0;',
+            //openedSymbol: '&#8863; &#x1f5c1;',
+            //collapseAll: 'Collapse all',
+            //expandAll: 'Expand all',
+            collapsed: true,
+        });
+        lay.addTo(map);
+        setBounds();
+        </script>        
+    </body>
+</html>
